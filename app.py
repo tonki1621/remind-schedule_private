@@ -127,14 +127,71 @@ with tab2:
         st.dataframe(display_df.reset_index(drop=True), use_container_width=True)
 
         st.markdown("---")
-        st.write("▼ 削除したいリマインドがある場合")
-        active_reminders = { f"{r['target_group_id']} ({r['message'][:10]}...)": r for r in reminders_data }
+        st.subheader("✏️ リマインドの編集・削除")
+        
+        # セレクトボックス用に辞書を作成
+        active_reminders = { f"{group_rev_dict.get(r['target_group_id'], '不明')} ({r['message'][:15]}...)": r for r in reminders_data }
+        
         if active_reminders:
-            del_target = st.selectbox("対象を選択", list(active_reminders.keys()))
-            if st.button("🗑️ 選択したリマインドを削除"):
-                if fetch_from_gas("delete_reminder", {"id": active_reminders[del_target]['id']}) == "success":
-                    st.warning("削除しました。")
-                    clear_cache_and_rerun()
+            selected_label = st.selectbox("編集する予約を選択", list(active_reminders.keys()))
+            target_r = active_reminders[selected_label]
+            
+            # 現在設定されている日時をパース（読み込み）
+            try:
+                e_date_str, e_time_str = target_r['send_time'].split(" ")
+                e_date = datetime.strptime(e_date_str, "%Y/%m/%d").date()
+                e_time = datetime.strptime(e_time_str, "%H:%M:%S").time()
+            except ValueError:
+                e_date = datetime.now(JST).date()
+                e_time = datetime.strptime("17:00", "%H:%M").time()
+            
+            # 繰り返し設定を読み込み
+            e_freq = target_r.get("frequency", "なし (1回のみ)")
+            e_end_str = target_r.get("end_date", "")
+            try:
+                e_end = datetime.strptime(e_end_str, "%Y/%m/%d").date() if e_end_str else datetime.now(JST).date() + timedelta(days=90)
+            except ValueError:
+                e_end = datetime.now(JST).date() + timedelta(days=90)
+
+            # 編集フォーム
+            with st.expander(f"【{group_rev_dict.get(target_r['target_group_id'], '不明')}】の設定を編集", expanded=True):
+                with st.form("edit_reminder_form"):
+                    c1, c2 = st.columns(2)
+                    with c1: new_date = st.date_input("送信日 (初回)", value=e_date)
+                    with c2: new_time = st.time_input("送信時間", value=e_time)
+                    
+                    rc1, rc2 = st.columns(2)
+                    freq_options = ["なし (1回のみ)", "毎日", "毎週", "毎月", "毎年"]
+                    with rc1:
+                        new_freq = st.selectbox("繰り返しパターン", freq_options, index=freq_options.index(e_freq) if e_freq in freq_options else 0)
+                    with rc2:
+                        new_end_date = st.date_input("終了日 (繰り返す場合のみ)", value=e_end)
+                    
+                    new_msg = st.text_area("メッセージ内容", value=target_r['message'], height=150)
+                    
+                    if st.form_submit_button("内容を更新する"):
+                        if not new_msg.strip():
+                            st.error("メッセージ内容を入力してください。")
+                        elif new_freq != "なし (1回のみ)" and new_end_date < new_date:
+                            st.error("❌ エラー：終了日は初回送信日より後の日付にしてください。")
+                        else:
+                            payload = {
+                                "id": target_r['id'],
+                                "send_time": f"{new_date.strftime('%Y/%m/%d')} {new_time.strftime('%H:%M:00')}",
+                                "message": new_msg,
+                                "target_group_id": target_r['target_group_id'], # グループはそのまま
+                                "frequency": new_freq,
+                                "end_date": new_end_date.strftime('%Y/%m/%d') if new_freq != "なし (1回のみ)" else ""
+                            }
+                            if fetch_from_gas("update_reminder", payload) == "success":
+                                st.success("✅ リマインドを更新しました！")
+                                clear_cache_and_rerun()
+
+                # 削除ボタンは誤操作を防ぐためフォームの外（下部）に配置
+                if st.button("🗑️ このリマインドを完全に削除", type="primary"):
+                    if fetch_from_gas("delete_reminder", {"id": target_r['id']}) == "success":
+                        st.warning("削除しました。")
+                        clear_cache_and_rerun()
     else:
         st.info("現在設定されているリマインドはありません。")
 
