@@ -27,7 +27,7 @@ st.markdown("""
         .stButton>button { background-color: #E67E22; color: white; border-radius: 8px; width: 100%; font-weight: bold; transition: 0.2s; }
         .stButton>button:hover { background-color: #D35400; transform: translateY(-2px); }
     </style>
-    <h1 class="main-title">🍛 おうちごはん リマインド管理</h1>
+    <h1 class="main-title">🛫  プライベート リマインド管理</h1>
     <hr>
 """, unsafe_allow_html=True)
 
